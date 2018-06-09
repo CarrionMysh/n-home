@@ -12,7 +12,6 @@
 #define ask '!'
 #define response '&'
 #define heartbit "##"
-#define pin_485_tr                              //нужно описать пин на реальном железе
 
 SoftwareSerial pc(tx_pc, rx_pc);        //инициализация Serial для получения команд с компа, для альфы
 
