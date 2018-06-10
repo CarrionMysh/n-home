@@ -16,8 +16,9 @@ byte status_rx = 0;
 //статус приема, 0="ok"
 //1="нет конца, таймаут"
 //2="нет начала"
-boolean id_mine = false;      //флаг распознования своего id
+//3="неизвестный заголовок"
 char data[value_data];
+boolean ask_f, response_f, hearbit_f;       //флаги заголовков
 
 void setup() {
   Serial.begin(115200, SERIAL_8E1);
@@ -25,14 +26,29 @@ void setup() {
   pinMode(pin_tr, OUTPUT);
   digitalWrite(led_pin, LOW);
   digitalWrite(pin_tr, LOW);
+  ask_f = false;
+  response_f = false;
 }
 
 void loop() {
 
 }
 
-byte com_c(){           //парсим содержимое
-  
+byte com_c() {          //парсим содержимое, пропускаем data[0] - '>', data[1..2] - 'id'
+  byte bytevar = 0;
+  switch (data[1]) {
+    case ask:
+      ask_f = true;
+      response_f = false;
+    case response:
+      ask_f = false;
+      response_f = true;
+    defaut:
+      ask_f = false;
+      response_f = false;
+      status_rx = 3;
+  }
+
 }
 
 boolean id_c() {           //проверяем свой/не свой id
