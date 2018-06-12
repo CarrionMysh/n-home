@@ -1,6 +1,4 @@
-#include <FastCRC_tables.h>
 #include <FastCRC.h>
-#include <FastCRC_cpu.h>
 //для передачи в линию используется хардварный serial
 #define pin_tr 4            //пин transmission enable для max485
 #define led_pin 13        //светодиод активности *debag
@@ -9,16 +7,12 @@
 #define response '&'
 #define heartbit '#'
 #define self_id 02              //свой id
-
-const byte value_data = 10; //размер пакета
-byte status_rx = 0;
-//статус приема, 0="ok"
-//1="нет конца, таймаут"
-//2="нет начала"
-//3="неизвестный заголовок"
+FastCRC8 CRC8;
+const byte value_data = 10; //размер пакета, 6 символов - служебные
 char data[value_data];
-char data_tx[value_data];
 boolean ask_f, response_f, heartbit_f;       //флаги заголовков
+byte end_char;                                          //номер символа '<' в пакете
+byte com;                                                 //номер команды из пакета
 
 void setup() {
   Serial.begin(115200, SERIAL_8E1);
@@ -26,62 +20,49 @@ void setup() {
   pinMode(pin_tr, OUTPUT);
   digitalWrite(led_pin, LOW);
   digitalWrite(pin_tr, LOW);
-  ask_f = false;
-  response_f = false;
   heartbit_f = false;
 }
 
 void loop() {
+  com = net_c();
 
 }
 
-void net_main() {          //финальная и основная работа с "сетью"
-  char ch[value_data - 4 - 1];
-  rx_c();                           //слушаем сеть
-  switch (status_rx) {
-    case 1:
-      ch[value_data - 4 - 1] = "99";
-      tx_c(ch[value_data - 4 - 1]);
-    case 2:
-    //нет вариантов по обработке неверного заголовка
-    case 3:
-      ch[value_data - 4 - 1] = "99";
-      tx_c(ch[value_data - 4 - 1]);
-  }
+byte net_c() {
+  if (!rx_c()) return;
+  byte bytevar = 0;
+  bytevar = 10 * (data[6] - '0') + (data[7] - '0');
+  return bytevar;
 }
 
-void tx_c(char tx_s[value_data - 4 - 1] ) {             //-1 т.к. нумерация в массиве идет с 0
-  data_tx[value_data] = '>' + response + self_id + tx_s[value_data - 4 - 1 + '<']; //формируем исходящий пакет
+void tx_c(char tx_s[value_data - 4] ) {             //-4: первые 4 симв. - служебные(>|CRC|header|)
+  char data_tx[value_data];
+  byte crc;
+  data_tx[value_data] = response + self_id + tx_s[value_data - 4 + '<']; //формируем исходящий пакет
+  crc = CRC8.smbus(data_tx, sizeof(data_tx));
+  data_tx[value_data] = '>' + crc + data_tx[value_data]; //добавляем символ начала пакета+crc к пакету
   tx_up();
   Serial.print(data_tx[value_data]);         //передаем в сеть данные
   tx_down();
 }
 
-byte com_c() {          //парсим содержимое, пропускаем data[0] - '>', data[1..2] - 'id'
-  byte bytevar = 0;
-  switch (data[1]) {      //проверка типа заголовка
-    case ask:
-      ask_f = true;
-      response_f = false;         //видим ask
-      if (!id_c()) return (0);             //вызываем id_c() если id не наш - выходим. здесь и ниже в процедуре
-    //return (0) - означет что команд пакет не несет
-    case response:
-      ask_f = false;
-      response_f = true;
-      return (0);                             //увидели response - значит пакет есть ответ другого слэйва - игнорируем
-defaut:
-      ask_f = false;
-      response_f = false;
-      status_rx = 3;                       //заголовок неизвестный, выходим с status_rx=3
-      return (0);
+boolean crc_c() {                       //дергаем crc из пакета
+  byte crc;
+  char subdata[value_data - 3];
+  if (data[1] >= 'A') {                   //считаем первый символ
+    crc = 16 * (data[1] - ('A' - 10));
+  } else {
+    crc = 16 * (data[1] - '0');
   }
-  if (data[4] == heartbit) {     //продолжаем и проверяем есть ли в пакете heartbit
-    heartbit_f = true;
-    return (0);
+  if (data[2] >= 'A') {                  //считаем второй символ
+    crc = crc + (data[2] - ('A' - 10));
+  } else {
+    crc = crc + (data[2] - '0');
   }
-  //т.к. пакет адресован нам - дергаем команды
-  bytevar = 10 * (data[4] - '0') + (data[5] - '0');
-  return (bytevar);                 //выходим, возвращем код команды
+  for (byte i = 3; i <= end_char; i++) { //для проверки CRC8 передаем строку, начиная с заголовка, после суммы CRC8
+    subdata[i - 3] = data[i];
+  }
+  if (CRC8.smbus(subdata, sizeof(subdata)) == crc) return true; else return false;
 }
 
 boolean id_c() {           //проверяем свой/не свой id
@@ -90,7 +71,16 @@ boolean id_c() {           //проверяем свой/не свой id
   if (bytevar == self_id) return true; else return false;
 }
 
-boolean rx_c() {
+void tx_up() {
+  digitalWrite(pin_tr, HIGH);
+  digitalWrite(led_pin, HIGH);
+}
+void tx_down() {
+  delay(tx_ready_delay);
+  digitalWrite(pin_tr, LOW);
+}
+
+boolean rx_c() {          //получение с сети данных
   boolean flag_data;
   byte count;
   char ch;
@@ -105,39 +95,26 @@ boolean rx_c() {
       time_rx = millis();
       ch = Serial.read();
       data[count] = ch;
-      //            debug.print("data[]="); debug.println(data[count]);
-      //            debug.print("count="); debug.println(count);
-
       if (data[count] == '<') {       //видим '<' - конец пакета
-        status_rx = 0;
-        //                debug.println("-------------------------");
+        end_char = count;
         break;
       }
       count++;
       if (count > 10) count = 0;
     }
     //пакет получили
-
     if (flag_data && ((millis() - time_rx) > timeout)) {        //были данные, но выходим по таймауту
-      status_rx = 1;
-      //            debug.println((millis() - time_rx));
       return false;
     }
   }
-  if (data[0] != '>') {
-    status_rx = 2;
+  if (data[0] != '>') {                                     //некорректное начало пакета
     return false;
   }
   digitalWrite(led_pin, LOW);
-  //    debug.println((millis() - time_rx));
-  return true;
-}
-
-void tx_up() {
-  digitalWrite(pin_tr, HIGH);
-  digitalWrite(led_pin, HIGH);
-}
-void tx_down() {
-  delay(tx_ready_delay);
-  digitalWrite(pin_tr, LOW);
+  if (!crc_c()) return false;                             //вызываем проверку crc
+  if ((data[3] != ask)  || !id_c()) return false;       //если не ask или не свой id - нахер с пляжа
+  if (data[6] == heartbit) {                             //стучим сердечком, и ничего более
+    tx_c(heartbit);
+    return false;                                               //возвращем false, т.к. отстучали heartbit, парсинг команд не нужен
+  }
 }
