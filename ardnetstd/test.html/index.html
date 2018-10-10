@@ -1,0 +1,42 @@
+<!doctype html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<title>test page</title>
+<link rel="stylesheet" href="style3.css" type="text/css" />
+<script src="jquery.min.js"></script>
+
+<script>
+var string;
+var adress='http://192.168.43.63:88/=';
+$(document).ready(function(){
+	function sendtoardu(){ $.ajax({ type: "GET", url: adress + string }); }
+	$(".d13").click(function(){ string = 'A'; sendtoardu();});	
+	$(".send_ligth_val").click(function(){ string = output.innerHTML; sendtoardu();});
+
+});
+
+</script>
+</head>
+<body>
+<a href="#" class="button short blue d13" title="One">One</a> <br />
+<a href="#" class="button short green" title="Two">Two</a> <br />
+<div class="slidecontainer">
+<input type="range" min="1" max="100" value="50" class="slider" id="test_ligth">
+<p> debug: <span id="ligth_val"></span></p>
+<a href="#" class="button long green send_ligth_val" title="send Ligth_val">send Ligth_val</a> <br />
+</div>
+<script>
+var slider = document.getElementById("test_ligth");
+var output = document.getElementById("ligth_val");
+output.innerHTML = slider.value;
+// Display the default slider value
+
+// Update the current slider value (each time you drag the slider handle)
+slider.oninput = function() {
+    output.innerHTML = this.value;
+}
+</script>
+</body>
+</html>
+
