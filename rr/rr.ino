@@ -10,6 +10,7 @@
 char self_id[2]="02";
 const char ask='!';
 //devel on
+#define exec_pin1 9		//пин для реле
 boolean flag_net;			//флаг получения пакета
 //devel off
 char com1[] = "100";		//команда номер 1, "зажечь светодиод"
@@ -20,6 +21,7 @@ char com1[] = "100";		//команда номер 1, "зажечь светод�
 SoftwareSerial pc(rx_pc, tx_pc);
 //debug off
 char net_packet[value_data];
+unsigned int timeout_packet;		//таймаут приема пакета, мс
 byte count;
 char* com_m[5] ={"01", "02", "03", "04","05"};	//команды
 byte com;		//команда полученная с линии
@@ -28,9 +30,12 @@ void setup() {
   Serial.begin(115200);
   pinMode(led_pin, OUTPUT);
   pinMode(pin_tr, OUTPUT);
+  pinMode(exec_pin1, OUTPUT);
   digitalWrite(led_pin, LOW);
   digitalWrite(pin_tr, LOW);
+  digitalWrite(exec_pin1, LOW);
   count = 0 ;
+  timeout_packet = 250;
   //debug on 
   pc.begin(115200);
   //debug off
@@ -43,16 +48,12 @@ void loop(){
 	pc.print("com: ");pc.println(com);}
 	switch (com) {								//тестовая заготовка обработки пакетов
 	    case 3:
+	      digitalWrite(exec_pin1, HIGH);
 	      digitalWrite(led_pin, HIGH);
-	      delay(250);
-	      digitalWrite(led_pin, LOW);
-	      delay(250);
 	      break;
 	    case 12:
-	      digitalWrite(led_pin, HIGH);
-	      delay(75);
+	      digitalWrite(exec_pin1, LOW);
 	      digitalWrite(led_pin, LOW);
-	      delay(75);
 	      break;
 	}
 	//devel_off
@@ -61,6 +62,7 @@ void loop(){
 void recive_com(){			//прием пакета
 	byte count = 0;
 	char ch;
+	unsigned int time_n;
 	boolean begin_of_packet;
 	begin_of_packet = false;
 	//devel_on
@@ -76,6 +78,7 @@ void recive_com(){			//прием пакета
 			ch = Serial.read();					//читаем что прилетело, заодно чистим буфер если сыпется мусор на линии
 			if (ch == '>' && !begin_of_packet) {
 				begin_of_packet = true;
+				time_n = millis();
 			}
 			if (begin_of_packet) {				//если был начало пакета '>'
 				net_packet[count] = ch;				// пишем в пакет
@@ -85,7 +88,10 @@ void recive_com(){			//прием пакета
 					prep_com();
 					break;
 				}
-				count++;
+				if ((millis()-time_n) > timeout_packet) {
+					begin_of_packet = false;
+					count = 0;
+				} else	count++;
 			}
 		}
 	}
