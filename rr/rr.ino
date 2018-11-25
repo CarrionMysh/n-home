@@ -1,19 +1,22 @@
 //код слэйва
 
-
+#include <FastCRC_tables.h>
+#include <FastCRC.h>
+#include <FastCRC_cpu.h>
 #include <SoftwareSerial.h>
 
 #define pin_tr 4            //пин transmission enable для max485
 #define led_pin 13        //светодиод активности *debag
 #define tx_ready_delay 1   //задержка для max485 (буфер? вообщем, неопределенность буфераmax485)
 #define value_data  10                        //размер пакета
-char self_id[2]="02";
+FastCRC8 CRC8;
+byte self_id=10;
 const char ask='!';
 //devel on
 #define exec_pin1 9		//пин для реле
 boolean flag_net;			//флаг получения пакета
 //devel off
-char com1[] = "100";		//команда номер 1, "зажечь светодиод"
+//char com1[] = "100";		//команда номер 1, "зажечь светодиод"
 //devel on
 #define tx_pc 5                                   //serial pc alfa
 #define rx_pc 6                                   //serial pc alfa
@@ -21,9 +24,9 @@ char com1[] = "100";		//команда номер 1, "зажечь светод�
 SoftwareSerial pc(rx_pc, tx_pc);
 //debug off
 char net_packet[value_data];
-unsigned int timeout_packet;		//таймаут приема пакета, мс
+unsigned long timeout_packet;		//таймаут приема пакета, мс
 byte count;
-char* com_m[5] ={"01", "02", "03", "04","05"};	//команды
+//char* com_m[5] ={"01", "02", "03", "04","05"};	//команды
 byte com;		//команда полученная с линии
 
 void setup() {
@@ -36,7 +39,7 @@ void setup() {
   digitalWrite(exec_pin1, LOW);
   count = 0 ;
   timeout_packet = 250;
-  //debug on 
+  //debug on
   pc.begin(115200);
   //debug off
 }
@@ -60,9 +63,9 @@ void loop(){
 }
 
 void recive_com(){			//прием пакета
-	byte count = 0;
+	count = 0;
 	char ch;
-	unsigned int time_n;
+	unsigned long time_n;
 	boolean begin_of_packet;
 	begin_of_packet = false;
 	//devel_on
@@ -71,23 +74,30 @@ void recive_com(){			//прием пакета
 	digitalWrite(pin_tr, LOW);
 	while (true){
 		if(Serial.available()){
-			//digitalWrite(led_pin, HIGH);
 			//devel_on
-			flag_net = true;
+			flag_net = true;;
 			//devel_off
 			ch = Serial.read();					//читаем что прилетело, заодно чистим буфер если сыпется мусор на линии
+      pc.print(ch);
 			if (ch == '>' && !begin_of_packet) {
 				begin_of_packet = true;
-				time_n = millis();
+				time_n = millis()-1;
 			}
 			if (begin_of_packet) {				//если был начало пакета '>'
 				net_packet[count] = ch;				// пишем в пакет
 				if (net_packet[count] == '<'){
-					//digitalWrite(led_pin, LOW);
-					net_packet[count+1]='\0';
-					prep_com();
-					break;
-				}
+          pc.println();pc.print("crc_c=");pc.println(crc_c());
+          if (crc_c()){
+  					if (verf_id()){        //вызываем проверку id
+              prep_com();
+  					       break;
+            } else {
+              begin_of_packet = false;
+              count = 0;
+              }
+            }
+          }
+
 				if ((millis()-time_n) > timeout_packet) {
 					begin_of_packet = false;
 					count = 0;
@@ -97,25 +107,42 @@ void recive_com(){			//прием пакета
 	}
 }
 
-void prep_com(){
-	byte count = 0;
-	while (net_packet[count] != '!'){		//ищем в пакете ask
-		count++;
-	}
-	com = 10 * (net_packet[count+1] - '0')+(net_packet[count+2] - '0');
-}
+boolean crc_c(){            //проверка crc
+  byte crc_incoming;
+  byte crc_calc;
+  byte buf[count-2];  //-2 crc идет вторым байтом, поэтому считаем с третьего
+  // pc.println();
+  // pc.print("buf[i]");
+  for (byte i=2; i<=count; i++){
+    buf[i-2] = byte(net_packet[i]);
+    // pc.print(buf[i-2]);
+  }
+  // pc.println();
+  crc_incoming = byte(net_packet[1]);
+  crc_calc = CRC8.smbus(buf, sizeof(buf));
+  // pc.print("crc_incoming=");pc.println(crc_incoming);
+  // pc.print("crc_calc=");pc.println(crc_calc);
 
-void response(char com[], char type_packet){		//отвечаем
-	digitalWrite(led_pin, HIGH);
-	digitalWrite(pin_tr, HIGH);
-	Serial.print('>');
-	Serial.print(self_id[0]);
-	Serial.print(self_id[1]);
-	Serial.print(type_packet);
-	Serial.print('9');								//отсылаем код 94 -- "ok!"
-	Serial.print('4');
-	Serial.print('<');
-	delay(tx_ready_delay);
-	digitalWrite(led_pin, LOW);
-	digitalWrite(pin_tr, LOW);
+  if (crc_incoming == crc_calc) return true; else return false;
+
 }
+boolean verf_id(){        //проверка id
+  if ((byte(net_packet[2])) == self_id) return true; else return false;
+}
+void prep_com(){
+  com = byte (net_packet[4]);
+}
+// void response(char com[], char type_packet){		//отвечаем
+// 	digitalWrite(led_pin, HIGH);
+// 	digitalWrite(pin_tr, HIGH);
+// 	Serial.print('>');
+// 	Serial.print(self_id[0]);
+// 	Serial.print(self_id[1]);
+// 	Serial.print(type_packet);
+// 	Serial.print('9');								//отсылаем код 94 -- "ok!"
+// 	Serial.print('4');
+// 	Serial.print('<');
+// 	delay(tx_ready_delay);
+// 	digitalWrite(led_pin, LOW);
+// 	digitalWrite(pin_tr, LOW);
+// }
