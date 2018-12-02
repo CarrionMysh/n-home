@@ -16,6 +16,7 @@ const char ask='!';      //тип пакета
 FastCRC8 CRC8;
 SoftwareSerial pc(rx_pc, tx_pc);        //инициализация Serial для получения команд с компа, для альфы
 byte self_id=1;
+byte alien_id;                                          //id, полученный от слейва
 byte data[255];           //массив для данных
 //devel on
 boolean flag_net;
@@ -35,8 +36,9 @@ void setup(){
 	digitalWrite(led_pin, LOW);
 	digitalWrite(pin_tr, LOW);
 	pc.println(F("Serial ok"));
-	timeout_packet = 250;
+	timeout_packet = 20;
 	nn = 0;
+	flag_net = false;
 }
 void loop(){
 	id_m = 10;
@@ -54,7 +56,7 @@ void trans_com(byte id, byte com, char type_packet, boolean data_b){   //фун�
 	byte mm;
 	if (data_b) {mm=(nn+3); } else mm=3;
 	byte packet [mm];
-	pc.print(F("Transmit:")); pc.print(F(" id=")); pc.print(id); pc.print(F(" com=")); pc.print(com);
+	pc.println();pc.print(F("Transmit:")); pc.print(F(" id=")); pc.print(id); pc.print(F(" com=")); pc.println(com);
 	digitalWrite(led_pin, HIGH);
 	digitalWrite(pin_tr, HIGH);
 	packet[0] = id;
@@ -69,9 +71,9 @@ void trans_com(byte id, byte com, char type_packet, boolean data_b){   //фун�
 	} else packet[3] = byte('<');        //иначе просто конец пакета
 
 	Serial.print('>');
-	pc.print(" crc"); pc.println(CRC8.smbus(packet, sizeof(packet)));
+	//pc.print(" crc"); pc.println(CRC8.smbus(packet, sizeof(packet)));
 	Serial.print(char(CRC8.smbus(packet, sizeof(packet))));
-	pc.print("sizeof=");pc.println(sizeof(packet));
+	//pc.print("sizeof="); pc.println(sizeof(packet));
 	for (byte i=0; i<=sizeof(packet); i++) {
 		Serial.print (char(packet[i]));
 	}
@@ -79,9 +81,18 @@ void trans_com(byte id, byte com, char type_packet, boolean data_b){   //фун�
 	digitalWrite(led_pin, LOW);
 	delay(tx_ready_delay);
 	digitalWrite(pin_tr, LOW);
+
+	recive_com(id);
+	if (flag_net){
+		pc.print(F("response: "));pc.print(F("id="));pc.print(alien_id);pc.print(F(" com="));pc.println(responce);
+	}
+	else{
+		pc.println(F("not response"));
+	}
 }
 
-void serialEvent(){                      //прием пакета
+
+void recive_com(byte id){                      //прием пакета
 	int count = 0;
 	char net_packet[value_data];
 	count = 0;
@@ -93,16 +104,17 @@ void serialEvent(){                      //прием пакета
 	flag_net = false;
 	//devel_off
 	digitalWrite(pin_tr, LOW);
+	time_n = millis();
 	while (true) {
 		if(Serial.available()) {
 			//devel_on
-			flag_net = true;;
+			//flag_net = true;
 			//devel_off
 			ch = Serial.read();                                     //читаем что прилетело, заодно чистим буфер если сыпется мусор на линии
 			pc.print(ch);
 			if (ch == '>' && !begin_of_packet) {
 				begin_of_packet = true;
-				time_n = millis()-1;
+
 			}
 			if (begin_of_packet) {                          //если был начало пакета '>'
 				net_packet[count] = ch;                         // пишем в пакет
@@ -117,15 +129,19 @@ void serialEvent(){                      //прием пакета
 					crc_incoming = byte(net_packet[1]);
 					crc_calc = CRC8.smbus(buf, sizeof(buf));        //конец функции подсчета crc
 					if (crc_incoming == crc_calc) {
-						if ((byte(net_packet[2])) == self_id) { //если id верный, то
+						if ((byte(net_packet[2])) == id) { //если id верный, то
 							responce = byte (net_packet[4]);                                                //получаем команду
 							if (net_packet[5] != '<') {                                             //проверяем наличие данных и если есть - пишем
 								flag_data = true;
+								flag_net = true;
 								nn = net_packet[5];
 								for (byte i=0; i<nn; i++) {
 									data[i] = net_packet[5+i];
 								}
-							} else flag_data = false;
+							} else {
+								flag_data = false;
+								flag_net = true;
+							}
 							break;
 						} else {
 							begin_of_packet = false;
@@ -134,10 +150,16 @@ void serialEvent(){                      //прием пакета
 					}
 				}
 				if ((millis()-time_n) > timeout_packet) {
-					begin_of_packet = false;
-					count = 0;
+					pc.println("begin timeout");
+					break;
+					// begin_of_packet = false;
+					// count = 0;
 				} else count++;
 			}
+		}
+		if ((millis()-time_n) > timeout_packet) {
+			pc.println("net timeout");
+			break;
 		}
 	}
 }

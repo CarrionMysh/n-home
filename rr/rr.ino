@@ -40,7 +40,7 @@ void setup() {
 	digitalWrite(pin_tr, LOW);
 	digitalWrite(exec_pin1, LOW);
 	// count = 0;
-	timeout_packet = 250;
+	timeout_packet = 20;
 	nn = 0;
 	//debug on
 	pc.begin(115200);
@@ -57,12 +57,12 @@ void loop(){
 	case 3:
 		digitalWrite(exec_pin1, HIGH);
 		digitalWrite(led_pin, HIGH);
-		response(for_master, ok, '&', false);
+		response(self_id, ok, '&', false);
 		break;
 	case 12:
 		digitalWrite(exec_pin1, LOW);
 		digitalWrite(led_pin, LOW);
-		response(for_master, ok, '&', false);
+		response(self_id, ok, '&', false);
 		break;
 	}
 	//devel_off
