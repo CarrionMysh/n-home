@@ -18,7 +18,7 @@ byte ok=94;                                                                     
 #define exec_pin1 9             //пин для реле
 boolean flag_net;                       //флаг получения пакета
 boolean flag_data;    //флаг наличия в пакете данных
-byte data[255];       //массив для данных
+byte data[254];       //массив для данных
 byte nn;              //размер блока ланных
 //devel off
 //devel on
@@ -40,10 +40,13 @@ void setup() {
 	digitalWrite(pin_tr, LOW);
 	digitalWrite(exec_pin1, LOW);
 	// count = 0;
-	timeout_packet = 20;
-	nn = 0;
+	timeout_packet = 100;
+	nn = 25;
 	//debug on
 	pc.begin(115200);
+	for (byte i=0; i<nn; i++){
+		data[i]=i+65;
+	}
 	//debug off
 }
 
@@ -57,7 +60,7 @@ void loop(){
 	case 3:
 		digitalWrite(exec_pin1, HIGH);
 		digitalWrite(led_pin, HIGH);
-		response(self_id, ok, '&', false);
+		response(self_id, ok, '&', true);
 		break;
 	case 12:
 		digitalWrite(exec_pin1, LOW);
@@ -108,7 +111,7 @@ void recive_com(){                      //прием пакета
 							if (net_packet[5] != '<') {          //проверяем наличие data                                   //проверяем наличие данных и если есть - пишем
 								flag_data = true;
 								nn = net_packet[5];								 //получаем размер даты
-								for (byte i=0; i<nn; i++) {					// и пишем ее в глобальный массив data[]
+								for (byte i=0; i<=nn; i++) {					// и пишем ее в глобальный массив data[]
 									data[i] = net_packet[5+i];
 								}
 							} else flag_data = false;							//если даты нет, то успокаиваемся
@@ -128,36 +131,10 @@ void recive_com(){                      //прием пакета
 	}
 }
 
-// ниже все перенес в функцию recive_com, для экономии памяти на глобальном массиве net_packet[]
-
-// boolean crc_c(){            //проверка crc
-//      byte crc_incoming;
-//      byte crc_calc;
-//      byte buf[count-2]; //-2 crc идет вторым байтом, поэтому считаем с третьего
-//      for (byte i=2; i<=count; i++) {
-//              buf[i-2] = byte(net_packet[i]);
-//      }
-//      crc_incoming = byte(net_packet[1]);
-//      crc_calc = CRC8.smbus(buf, sizeof(buf));
-//      if (crc_incoming == crc_calc) return true; else return false;
-// }
-
-// void prep_com(){
-//      com = byte (net_packet[4]);
-// }
-// void prep_data(){
-//      if (net_packet[5] != '<') {
-//              flag_data = true;
-//              nn = net_packet[5];
-//              for (byte i=0; i<nn; i++) {
-//                      data[i] = net_packet[5+i];
-//              }
-//      } else flag_data = false;
-// }
-
 void response(byte id, byte com, char type_packet, boolean data_b){   //функция передачи в линию
-	byte mm;
-	if (data_b) {mm=(nn+3); } else mm=3;
+	unsigned int mm;
+	if (data_b) mm=(nn+4); else mm=3;
+	pc.print("mm=");pc.println(mm);
 	byte packet [mm];
 	digitalWrite(led_pin, HIGH);																		//поднимаем пин инидикации
 	digitalWrite(pin_tr, HIGH);																			//поднимаем пин передачи max485
@@ -166,7 +143,7 @@ void response(byte id, byte com, char type_packet, boolean data_b){   //функ
 	packet[2] = com;																								//ответ для мастера
 	if (data_b) {                               //если данные нужно передавать, дополнительно грузим в массив блок данных, количеством nn
 		packet[3] = nn;                           //если данные, то помещаем 4 байтом размер данных
-		for (byte i=0; i<=nn; i++) {
+		for (byte i=0; i<nn; i++) {
 			packet[4+i] = data[i];                                                  //если данные - льём их в пакет
 		}
 		packet[4+nn] = byte('<');                                                	//и заканчиваем блок данных концом пакета '<'                                                                                                                                                                                   //и в конец помещаем '<'
@@ -176,6 +153,7 @@ void response(byte id, byte com, char type_packet, boolean data_b){   //функ
 	//pc.print("crc"); pc.println(CRC8.smbus(packet, sizeof(packet)));
 	Serial.print(char(CRC8.smbus(packet, sizeof(packet))));										//считаем crc и передаем в линию
 	for (byte i=0; i<=sizeof(packet); i++) {																	//льем в линию остальной пакет
+		pc.print(char(packet[i]));
 		Serial.print (char(packet[i]));
 	}
 
