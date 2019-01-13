@@ -39,29 +39,46 @@ void setup(){
 	timeout_packet = 250;
 	nn = 0;
 	flag_net = false;
+	flag_data = false;
+	//debug on
+	// nn = 25;
+	// for (byte i=0; i<nn; i++){
+	// 	data[i]=i+65;
+	// }
+	//debug off
 }
 void loop(){
 	id_m = 10;
 	com_m = 3;
-	trans_com(id_m,com_m,ask,false);
-		pc.println();pc.print("data=");
-		// pc.print(data[0]);
-		// pc.print(data[1]);
-		for (byte i=0; i<=nn; i++){
-			pc.print(char(data[i]));
-		}
-		pc.println();
+	write_data();
+	trans_com(id_m,com_m,ask,true);
+	read_data();
 	delay (2000);
 	com_m = 12;
 	trans_com(id_m,com_m,ask,false);
 	delay (2000);
 }
 
+void read_data(){
+	pc.println();pc.print("readdata=");
+	for (byte i=0; i<nn; i++){
+		pc.print(char(data[i]));
+	}
+	pc.println();
+}
+
+void write_data(){
+	nn = 5;
+	for (byte i=0; i<nn; i++){
+		data[i]=i+97;
+	}
+}
+
 void trans_com(byte id, byte com, char type_packet, boolean data_b){   //функция передачи в линию
-	byte mm;
-	if (data_b) {mm=(nn+3); } else mm=3;
+	unsigned int mm;
+	if (data_b) {mm=(nn+4); } else mm=3;
 	byte packet [mm];
-	pc.println();pc.print(F("Transmit:")); pc.print(F(" id=")); pc.print(id); pc.print(F(" com=")); pc.println(com);
+	pc.println();pc.println(F("_________________:")); pc.print(F(" id=")); pc.print(id); pc.print(F(" com=")); pc.println(com);
 	digitalWrite(led_pin, HIGH);
 	digitalWrite(pin_tr, HIGH);
 	packet[0] = id;
@@ -104,6 +121,7 @@ void recive_com(byte id){                      //прием пакета
 	char ch;
 	unsigned long time_n;
 	boolean begin_of_packet;
+	flag_data = false;
 	begin_of_packet = false;
 	//devel_on
 	flag_net = false;
@@ -141,11 +159,11 @@ void recive_com(byte id){                      //прием пакета
 								flag_data = true;
 								flag_net = true;
 								nn = net_packet[5];
-								pc.println();pc.print("debug=");
-								for (byte i=0; i<nn; i++) {
-									data[i] = net_packet[6+i];
-									pc.print(char(data[i]));
-								}
+								// pc.println();pc.print("debug=");
+								 for (byte i=0; i<nn; i++) {
+								 	data[i] = net_packet[6+i];
+								// 	pc.print(char(data[i]));
+								 }
 							} else {
 								flag_data = false;
 								flag_net = true;

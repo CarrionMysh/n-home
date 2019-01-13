@@ -27,7 +27,8 @@ byte nn;              //размер блока ланных
 SoftwareSerial pc(rx_pc, tx_pc);
 //debug off
 
-unsigned long timeout_packet;           //таймаут приема пакета, мс
+unsigned long timeout_packet;           //таймаут приема пакета, при наличии, мс
+unsigned long timeout_tick;							//таймаут прослушки линии без пакета, чтобы не висеть постояно в цикле прослушки, мс
 //byte count;
 byte com;               //команда полученная с линии
 
@@ -40,13 +41,10 @@ void setup() {
 	digitalWrite(pin_tr, LOW);
 	digitalWrite(exec_pin1, LOW);
 	// count = 0;
-	timeout_packet = 100;
-	nn = 25;
+	timeout_packet = 250;
+	timeout_tick = 100;
 	//debug on
 	pc.begin(115200);
-	for (byte i=0; i<nn; i++){
-		data[i]=i+65;
-	}
 	//debug off
 }
 
@@ -54,12 +52,14 @@ void loop(){
 	recive_com();
 	//devel_on
 	if (flag_net) {
+		pc.println("_________________");
 		pc.print("com: "); pc.println(com);
-	}
 	switch (com) {                                                          //тестовая заготовка обработки пакетов
 	case 3:
 		digitalWrite(exec_pin1, HIGH);
 		digitalWrite(led_pin, HIGH);
+		if (flag_data) read_data();																	//полчили данные и пишем их куда-то
+		write_data();																	//где-то считали данные и пишем в дату
 		response(self_id, ok, '&', true);
 		break;
 	case 12:
@@ -69,34 +69,54 @@ void loop(){
 		break;
 	}
 	//devel_off
+ }
+}
+
+void read_data(){
+	pc.println();pc.print("readdata=");
+	for (byte i=0; i<nn; i++){
+		pc.print(char(data[i]));
+	}
+	pc.println();
+}
+
+void write_data(){
+	nn = 10;
+	for (byte i=0; i<nn; i++){
+		data[i]=i+65;
+	}
 }
 
 void recive_com(){                      //прием пакета
-	char net_packet[value_data];
 	int count = 0;
+	char net_packet[value_data];
+	count = 0;
 	char ch;
-	unsigned long time_n;
+	unsigned long time_n, time_n_tick;
 	boolean begin_of_packet;
+	flag_data = false;
 	begin_of_packet = false;
 	//devel_on
 	flag_net = false;
 	//devel_off
 	digitalWrite(pin_tr, LOW);
+	time_n = millis();
+	time_n_tick = millis();
 	while (true) {
 		if(Serial.available()) {
 			//devel_on
-			flag_net = true;;
+			//flag_net = true;
 			//devel_off
+			time_n_tick = millis();																	//услышали что-то в линии - сбросили таймер тика
 			ch = Serial.read();                                     //читаем что прилетело, заодно чистим буфер если сыпется мусор на линии
-			pc.print(ch);
+			 //pc.print(ch);
 			if (ch == '>' && !begin_of_packet) {
 				begin_of_packet = true;
-				time_n = millis()-1;
+
 			}
 			if (begin_of_packet) {                          //если был начало пакета '>'
 				net_packet[count] = ch;                         // пишем в пакет
 				if (net_packet[count] == '<') {
-					// pc.println(); pc.print("crc_c="); pc.println(crc_c());
 					byte crc_incoming;                                                                                              //начало функции высчитывания crc
 					byte crc_calc;
 					byte buf[count-2]; //-2 crc идет вторым байтом, поэтому считаем с третьего
@@ -107,34 +127,108 @@ void recive_com(){                      //прием пакета
 					crc_calc = CRC8.smbus(buf, sizeof(buf));        //конец функции подсчета crc
 					if (crc_incoming == crc_calc) {
 						if ((byte(net_packet[2])) == self_id) { //если id верный, то
-							com = byte (net_packet[4]);                                             //получаем команду
-							if (net_packet[5] != '<') {          //проверяем наличие data                                   //проверяем наличие данных и если есть - пишем
+							com = byte (net_packet[4]);        //получаем команду
+							if (net_packet[5] != '<') {             //проверяем наличие данных и если есть - пишем
+								// pc.print("data_nn=");pc.print(byte(net_packet[5]));
 								flag_data = true;
-								nn = net_packet[5];								 //получаем размер даты
-								for (byte i=0; i<=nn; i++) {					// и пишем ее в глобальный массив data[]
-									data[i] = net_packet[5+i];
-								}
-							} else flag_data = false;							//если даты нет, то успокаиваемся
+								flag_net = true;
+								nn = net_packet[5];
+								// pc.println();pc.print("debug=");
+								 for (byte i=0; i<nn; i++) {
+									data[i] = net_packet[6+i];
+								// 	pc.print(char(data[i]));
+								 }
+							} else {
+								flag_data = false;
+								flag_net = true;
+							}
 							break;
 						} else {
-							begin_of_packet = false;							//id чужой, нам не нужен этот пакет
-							count = 0;														//и сбрасываем счетчик байтов
+							begin_of_packet = false;
+							count = 0;
 						}
 					}
 				}
-				if ((millis()-time_n) > timeout_packet) {		//проверка на таймаут, с момента '>'
-					begin_of_packet = false;
-					count = 0;
+				if ((millis()-time_n) > timeout_packet) {
+					pc.println();pc.println("begin timeout");
+					break;
+					// begin_of_packet = false;
+					// count = 0;
 				} else count++;
 			}
+		}
+		if (!begin_of_packet && ((millis()-time_n_tick) > timeout_tick)) {
+			// pc.println();pc.println("net timeout");
+			break;																			//хер знает
 		}
 	}
 }
 
+
+// void recive_com(){                      //прием пакета
+// 	char net_packet[value_data];
+// 	int count = 0;
+// 	char ch;
+// 	unsigned long time_n;
+// 	boolean begin_of_packet;
+// 	begin_of_packet = false;
+// 	//devel_on
+// 	flag_net = false;
+// 	//devel_off
+// 	digitalWrite(pin_tr, LOW);
+// 	while (true) {
+// 		if(Serial.available()) {
+// 			//devel_on
+// 			flag_net = true;;
+// 			//devel_off
+// 			ch = Serial.read();                                     //читаем что прилетело, заодно чистим буфер если сыпется мусор на линии
+// 			pc.print(ch);
+// 			if (ch == '>' && !begin_of_packet) {
+// 				begin_of_packet = true;
+// 				time_n = millis()-1;
+// 			}
+// 			if (begin_of_packet) {                          //если был начало пакета '>'
+// 				net_packet[count] = ch;                         // пишем в пакет
+// 				if (net_packet[count] == '<') {
+// 					// pc.println(); pc.print("crc_c="); pc.println(crc_c());
+// 					byte crc_incoming;                                                                                              //начало функции высчитывания crc
+// 					byte crc_calc;
+// 					byte buf[count-2]; //-2 crc идет вторым байтом, поэтому считаем с третьего
+// 					for (byte i=2; i<=count; i++) {
+// 						buf[i-2] = byte(net_packet[i]);
+// 					}
+// 					crc_incoming = byte(net_packet[1]);
+// 					crc_calc = CRC8.smbus(buf, sizeof(buf));        //конец функции подсчета crc
+// 					if (crc_incoming == crc_calc) {
+// 						if ((byte(net_packet[2])) == self_id) { //если id верный, то
+// 							com = byte (net_packet[4]);                                             //получаем команду
+// 							if (net_packet[5] != '<') {          //проверяем наличие data                                   //проверяем наличие данных и если есть - пишем
+// 								flag_data = true;
+// 								nn = net_packet[5];								 //получаем размер даты
+// 								for (byte i=0; i<=nn; i++) {					// и пишем ее в глобальный массив data[]
+// 									data[i] = net_packet[5+i];
+// 								}
+// 							} else flag_data = false;							//если даты нет, то успокаиваемся
+// 							break;
+// 						} else {
+// 							begin_of_packet = false;							//id чужой, нам не нужен этот пакет
+// 							count = 0;														//и сбрасываем счетчик байтов
+// 						}
+// 					}
+// 				}
+// 				if ((millis()-time_n) > timeout_packet) {		//проверка на таймаут, с момента '>'
+// 					begin_of_packet = false;
+// 					count = 0;
+// 				} else count++;
+// 			}
+// 		}
+// 	}
+// }
+
 void response(byte id, byte com, char type_packet, boolean data_b){   //функция передачи в линию
 	unsigned int mm;
 	if (data_b) mm=(nn+4); else mm=3;
-	pc.print("mm=");pc.println(mm);
+	//pc.print("mm=");pc.println(mm);
 	byte packet [mm];
 	digitalWrite(led_pin, HIGH);																		//поднимаем пин инидикации
 	digitalWrite(pin_tr, HIGH);																			//поднимаем пин передачи max485
@@ -153,7 +247,7 @@ void response(byte id, byte com, char type_packet, boolean data_b){   //функ
 	//pc.print("crc"); pc.println(CRC8.smbus(packet, sizeof(packet)));
 	Serial.print(char(CRC8.smbus(packet, sizeof(packet))));										//считаем crc и передаем в линию
 	for (byte i=0; i<=sizeof(packet); i++) {																	//льем в линию остальной пакет
-		pc.print(char(packet[i]));
+		//pc.print(char(packet[i]));
 		Serial.print (char(packet[i]));
 	}
 
