@@ -6,7 +6,7 @@
 #include <SoftwareSerial.h>
 
 #define pin_tr 4            //пин transmission enable для max485
-#define led_pin 13        //светодиод активности *debag
+//#define led_pin 13        //светодиод активности *debag
 #define tx_ready_delay 1   //задержка для max485 (буфер? вообщем, неопределенность буфераmax485)
 #define value_data  261                        //размер пакета packet+data
 FastCRC8 CRC8;
@@ -32,12 +32,39 @@ unsigned long timeout_tick;							//таймаут прослушки линии
 //byte count;
 byte com;               //команда полученная с линии
 
+//__________________________
+#include <SPI.h>
+//13 SCLK	вывод тактовых импульсов SPI;
+//12 MOSI	данные от ведущего – к ведомому;
+//11 MISO	данные от ведомого к ведущему;
+//10 SS	выбор ведомого.
+#include <TimerOne.h>
+#define pin_relay 7
+volatile byte debug = 0;                                                                                                                //временная переменная
+volatile boolean zero_cross = 0;          //флаг перехода нуля
+volatile byte count_step [7];             //счетчик числа проверок после прохождения нуля для каждого симмистора
+volatile byte triac_level_bright[7];               //заданный уровень яркости 128..0 для 8 симмисторов
+volatile byte bitsToSend = 0;                      //байт (карта) состояний симмисторов
+//количество уровней яркости 0 = ON, 128 = OFF
+volatile byte freqStep = 75;                       //This is the delay-per-brightness step in microseconds.
+// This is the delay-per-brightness step in microseconds.
+// For 60 Hz it should be 65
+// It is calculated based on the frequency of your voltage supply (50Hz or 60Hz)
+// and the number of brightness steps you want.
+// Realize that there are 2 zerocrossing per cycle. This means
+// zero crossing happens at 120Hz for a 60Hz supply or 100Hz for a 50Hz supply.
+// To calculate freqStep divide the length of one full half-wave of the power
+// cycle (in microseconds) by the number of brightness steps.
+// (120 Hz=8333uS) / 128 brightness steps = 65 uS / brightness step
+// (100Hz=10000uS) / 128 steps = 75uS/step
+//__________________________
+
 void setup() {
 	Serial.begin(115200);
-	pinMode(led_pin, OUTPUT);
+	//pinMode(led_pin, OUTPUT);
 	pinMode(pin_tr, OUTPUT);
 	pinMode(exec_pin1, OUTPUT);
-	digitalWrite(led_pin, LOW);
+	//digitalWrite(led_pin, LOW);
 	digitalWrite(pin_tr, LOW);
 	digitalWrite(exec_pin1, LOW);
 	// count = 0;
@@ -57,14 +84,14 @@ void loop(){
 	switch (com) {                                                          //тестовая заготовка обработки пакетов
 	case 3:
 		digitalWrite(exec_pin1, HIGH);
-		digitalWrite(led_pin, HIGH);
+		//digitalWrite(led_pin, HIGH);
 		if (flag_data) read_data();																	//полчили данные и пишем их куда-то
 		write_data();																	//где-то считали данные и пишем в дату
 		response(self_id, ok, '&', true);
 		break;
 	case 12:
 		digitalWrite(exec_pin1, LOW);
-		digitalWrite(led_pin, LOW);
+		//digitalWrite(led_pin, LOW);
 		response(self_id, ok, '&', false);
 		break;
 	}
@@ -164,73 +191,12 @@ void recive_com(){                      //прием пакета
 	}
 }
 
-
-// void recive_com(){                      //прием пакета
-// 	char net_packet[value_data];
-// 	int count = 0;
-// 	char ch;
-// 	unsigned long time_n;
-// 	boolean begin_of_packet;
-// 	begin_of_packet = false;
-// 	//devel_on
-// 	flag_net = false;
-// 	//devel_off
-// 	digitalWrite(pin_tr, LOW);
-// 	while (true) {
-// 		if(Serial.available()) {
-// 			//devel_on
-// 			flag_net = true;;
-// 			//devel_off
-// 			ch = Serial.read();                                     //читаем что прилетело, заодно чистим буфер если сыпется мусор на линии
-// 			pc.print(ch);
-// 			if (ch == '>' && !begin_of_packet) {
-// 				begin_of_packet = true;
-// 				time_n = millis()-1;
-// 			}
-// 			if (begin_of_packet) {                          //если был начало пакета '>'
-// 				net_packet[count] = ch;                         // пишем в пакет
-// 				if (net_packet[count] == '<') {
-// 					// pc.println(); pc.print("crc_c="); pc.println(crc_c());
-// 					byte crc_incoming;                                                                                              //начало функции высчитывания crc
-// 					byte crc_calc;
-// 					byte buf[count-2]; //-2 crc идет вторым байтом, поэтому считаем с третьего
-// 					for (byte i=2; i<=count; i++) {
-// 						buf[i-2] = byte(net_packet[i]);
-// 					}
-// 					crc_incoming = byte(net_packet[1]);
-// 					crc_calc = CRC8.smbus(buf, sizeof(buf));        //конец функции подсчета crc
-// 					if (crc_incoming == crc_calc) {
-// 						if ((byte(net_packet[2])) == self_id) { //если id верный, то
-// 							com = byte (net_packet[4]);                                             //получаем команду
-// 							if (net_packet[5] != '<') {          //проверяем наличие data                                   //проверяем наличие данных и если есть - пишем
-// 								flag_data = true;
-// 								nn = net_packet[5];								 //получаем размер даты
-// 								for (byte i=0; i<=nn; i++) {					// и пишем ее в глобальный массив data[]
-// 									data[i] = net_packet[5+i];
-// 								}
-// 							} else flag_data = false;							//если даты нет, то успокаиваемся
-// 							break;
-// 						} else {
-// 							begin_of_packet = false;							//id чужой, нам не нужен этот пакет
-// 							count = 0;														//и сбрасываем счетчик байтов
-// 						}
-// 					}
-// 				}
-// 				if ((millis()-time_n) > timeout_packet) {		//проверка на таймаут, с момента '>'
-// 					begin_of_packet = false;
-// 					count = 0;
-// 				} else count++;
-// 			}
-// 		}
-// 	}
-// }
-
 void response(byte id, byte com, char type_packet, boolean data_b){   //функция передачи в линию
 	unsigned int mm;
 	if (data_b) mm=(nn+4); else mm=3;
 	//pc.print("mm=");pc.println(mm);
 	byte packet [mm];
-	digitalWrite(led_pin, HIGH);																		//поднимаем пин инидикации
+	//digitalWrite(led_pin, HIGH);																		//поднимаем пин инидикации
 	digitalWrite(pin_tr, HIGH);																			//поднимаем пин передачи max485
 	packet[0] = id;																									//в пакет целевой id
 	packet[1] = byte(type_packet);																	//в пакет тип пакета
@@ -251,7 +217,7 @@ void response(byte id, byte com, char type_packet, boolean data_b){   //функ
 		Serial.print (char(packet[i]));
 	}
 
-	digitalWrite(led_pin, LOW);																			//гасим пин инидикации
+	//digitalWrite(led_pin, LOW);																			//гасим пин инидикации
 	delay(tx_ready_delay);																					//ждем когда max485 отдаст все в линию
 	digitalWrite(pin_tr, LOW);																			//опускаем пин передачи max485
 }
