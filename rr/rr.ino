@@ -37,7 +37,7 @@ byte com;                               //команда полученная с
 
 void setup() {
 	Serial.begin(115200);
-  //pinMode(led_pin, OUTPUT);
+	//pinMode(led_pin, OUTPUT);
 	pinMode(pin_tr, OUTPUT);
 	pinMode(pin_relay, OUTPUT);
 	//digitalWrite(led_pin, LOW);
@@ -52,7 +52,7 @@ void setup() {
 
 void loop(){
 	recive_com();
-  job();
+	job();
 	// //devel_on
 	// if (flag_net) {
 	//      pc.println("_________________");
@@ -77,9 +77,9 @@ void loop(){
 
 void job(){                                     //обработчик команд
 	if (flag_net) {
-    pc.println();
-    pc.println("_________________");
-    pc.print("com: "); pc.println(com);
+		pc.println();
+		pc.println("_________________");
+		pc.print("com: "); pc.println(com);
 		switch (com) {
 		case 10:                              //"включить яркостью"
 			digitalWrite(pin_relay, LOW); //включаем реле
@@ -93,8 +93,8 @@ void job(){                                     //обработчик кома�
 					triac_level_bright[data[i]] = data[1]; //дергаем номер симистора из блока данных, яркость data[1]
 				}
 			}
-      read_data();
-      response(self_id, ok, '&', false);
+			read_data();
+			response(self_id, ok, '&', false);
 			break;
 		case 11:                                  //"выключить"
 			if (data[0] == 0) {                     //"все"
@@ -107,8 +107,8 @@ void job(){                                     //обработчик кома�
 					triac_level_bright[data[i]] = step_bri; //дергаем из data[] номера симисторов и гасим их яркостью 128
 				}
 			}
-      read_data();
-      response(self_id, ok, '&', false);
+			read_data();
+			response(self_id, ok, '&', false);
 			break;
 		case 12:                                  //"убавить"
 			if (data[0] == 0) {                     //"все"
@@ -156,11 +156,11 @@ void job(){                                     //обработчик кома�
 			break;
 		case 18:                //"отключить реле"
 			digitalWrite(pin_relay, HIGH);
-      response(self_id, ok, '&', false);
+			response(self_id, ok, '&', false);
 			break;
 		case 19:                //"включить реле"
 			digitalWrite(pin_relay, LOW);
-      response(self_id, ok, '&', false);
+			response(self_id, ok, '&', false);
 			break;
 		}
 		com = 0;                //обнуляем значение команды после отработки
@@ -183,11 +183,10 @@ void write_data(){
 }
 
 void recive_com(){                      //прием пакета
-	int count = 0;
-	//char net_packet[value_data];
+	unsigned int count = 0;
 	count = 0;
 	char ch;
-	unsigned long time_n, time_n_tick;
+	unsigned long time_n;
 	boolean begin_of_packet;
 	flag_data = false;
 	begin_of_packet = false;
@@ -195,78 +194,81 @@ void recive_com(){                      //прием пакета
 	flag_net = false;
 	//devel_off
 	digitalWrite(pin_tr, LOW);
-	time_n = millis();
-	time_n_tick = millis();
 	while (true) {
 		if(Serial.available()) {
 			//devel_on
 			//flag_net = true;
 			//devel_off
-			time_n_tick = millis();                                                                                                                                 //услышали что-то в линии - сбросили таймер тика
+			//time_n_tick = millis();                                                                                                                                 //услышали что-то в линии - сбросили таймер тика
 			ch = Serial.read();                                     //читаем что прилетело, заодно чистим буфер если сыпется мусор на линии
 			if (ch == '>' && !begin_of_packet) {
 				begin_of_packet = true;
-
+				count = 0;
+				time_n = millis();
 			}
 			if (begin_of_packet) {                          //если был начало пакета '>'
 				net_packet[count] = ch;                         // пишем в пакет
 				if (net_packet[count] == '<') {
 					byte crc_incoming;                                                                                              //начало функции высчитывания crc
 					byte crc_calc;
-					// byte buf[count-2]; //-2 crc идет вторым байтом, поэтому считаем с третьего
-					// for (byte i=2; i<=count; i++) {
-					// 	buf[i-2] = byte(net_packet[i]);
-					// }
+
 					crc_incoming = byte(net_packet[1]);
-					crc_calc = CRC8.smbus(&net_packet[2], count-2);        //конец функции подсчета crc
-          pc.println();
-          pc.print("CRC_incoming=");pc.println(crc_incoming);
-          pc.print("CRC_calc=");pc.println(crc_calc);
-          pc.print("count=");pc.println(count);
+					crc_calc = CRC8.smbus(&net_packet[2], count-1);        //конец функции подсчета crc
+
+					pc.println();
+					pc.print("CRC_incoming="); pc.println(crc_incoming);
+					pc.print("CRC_calc="); pc.println(crc_calc);
+					pc.print("count="); pc.println(count);
+
 					if (crc_incoming == crc_calc) {
 						if ((byte(net_packet[2])) == self_id) { //если id верный, то
 							com = byte (net_packet[4]);        //получаем команду
 							if (net_packet[5] != '<') {             //проверяем наличие данных и если есть - пишем
-								 pc.print("data_nn=");pc.print(byte(net_packet[5]));
+								pc.print("data_in_nn="); pc.print(byte(net_packet[5]));
 								flag_data = true;
 								flag_net = true;
 								nn = net_packet[5];
-								// pc.println();pc.print("debug=");
 								for (byte i=0; i<nn; i++) {
 									data[i] = net_packet[6+i];
 								}
-							} else {
+							}
+							else {
 								flag_data = false;
 								flag_net = true;
 							}
 							break;
-						} else {
-							begin_of_packet = false;
-							count = 0;
 						}
-					} else {
-            pc.println();
-            pc.println("CRC_incoming error");
-          }
+						else {
+							begin_of_packet = false;
+						}
+					}
+					else {
+						pc.println();
+						pc.println("CRC_incoming error");
+						begin_of_packet = false;
+					}
 				}
 				if ((millis()-time_n) > timeout_packet) {
 					pc.println(); pc.println("begin timeout");
-					break;
-					// begin_of_packet = false;
+					begin_of_packet = false;
 					// count = 0;
-				} else count++;
+					// break;
+				}
+				else count++;
 			}
 		}
-		if (!begin_of_packet && ((millis()-time_n_tick) > timeout_tick)) {
-			// pc.println();pc.println("net timeout");
-			break;                                                                                                                                                  //хер знает
-		}
+		// if (!begin_of_packet && ((millis()-time_n_tick) > timeout_tick)) {
+		//      pc.println(); pc.println("tick timeout");
+		//      begin_of_packet = false;
+		//      // count = 0;
+		//      break;                                                                                                                                                  //хер знает
+		// }
 	}
 }
 
 void response(byte id, byte com, char type_packet, boolean data_b){   //функция передачи в линию
-	unsigned int mm;
-	if (data_b) mm=(nn+4); else mm=3;
+	unsigned int mm;     //конечное количество байтов в пакете, без '>' и crc
+	if (data_b) mm=(nn+4+1); else mm=4;    //5=id+type_packet+com+индекс_nn+'>'
 	//pc.print("mm=");pc.println(mm);
 	//byte packet [mm];
 	// digitalWrite(led_pin, HIGH);                                                                                                                                            //поднимаем пин инидикации
@@ -285,15 +287,15 @@ void response(byte id, byte com, char type_packet, boolean data_b){   //функ
 	Serial.print('>');
 	//pc.print("crc"); pc.println(CRC8.smbus(net_packet, sizeof(net_packet)));
 	Serial.print(char(CRC8.smbus(net_packet, mm)));      //считаем crc и передаем в линию
-  pc.print("crc_outgoing="); pc.println(CRC8.smbus(net_packet, mm));
-	for (byte i=0; i<=mm; i++) {                                                                                                                                        //льем в линию остальной пакет
+	pc.print("crc_outgoing="); pc.println(CRC8.smbus(net_packet, mm));
+	for (byte i=0; i<mm; i++) {                                                                                                                                        //льем в линию остальной пакет
 		//pc.print(char(net_packet[i]));
 		Serial.print (char(net_packet[i]));
 	}
-  pc.println();
+	pc.println();
 
 	//digitalWrite(led_pin, LOW);                                                                                                                                                     //гасим пин инидикации
 	delay(tx_ready_delay);                                                                                                                                                                  //ждем когда max485 отдаст все в линию
 	digitalWrite(pin_tr, LOW);
-  //delete[] packet;                                                                                                                                                    //опускаем пин передачи max485
+	//delete[] packet;                                                                                                                                                    //опускаем пин передачи max485
 }

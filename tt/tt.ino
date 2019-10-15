@@ -44,7 +44,7 @@ void setup(){
 	// //debug on
 	// nn = 25;
 	// for (byte i=0; i<nn; i++){
-	// 	data[i]=i+65;
+	//      data[i]=i+65;
 	// }
 	// //debug off
 }
@@ -52,68 +52,53 @@ void loop(){
 	id_m = 10;
 	com_m = 18;                    // "отключить реле"
 	trans_com(id_m,com_m,ask,false);
-  delay (2000);
-  //_________________
-  // id_m = 10;
-  // com_m = 19;                    // "включить реле"
+	delay (2000);
+	//_________________
+	// id_m = 10;
+	// com_m = 19;                    // "включить реле"
 	// trans_com(id_m,com_m,ask,false);
 	// delay (2000);
-  //_________________
-  id_m = 10;
-  com_m = 10;                    //"включить""
-  data[0] = 0;                   //из принципа обмена: 0 = "все"
-  nn=1;                        //количество данных 1 байт
-  trans_com(id_m,com_m,ask,true);
-  delay (2000);
-  //_________________
-  id_m = 10;
-  com_m = 11;                   // "выключить"...
-  data[0] = 1;						    	//...первую лампу...
-	data[1] = 3;									//...третью лампу...
-  data[2] = 5;                  //...пятую лампу
-  nn=3;                       // количество данных 2 байта
-  trans_com(id_m,com_m,ask,true);
-  delay(2000);
-  //_________________
-  id_m = 10;
-  com_m = 11;                    // "выключить"...
-  data[0] = 0;                   // "все"
-  nn=1;
-  trans_com(id_m,com_m,ask,true);
-  delay(2000);
+	//_________________
+	id_m = 10;
+	com_m = 10;              //"включить""
+	data[0] = 0;             //из принципа обмена: 0 = "все"
+	nn=1;                  //количество данных 1 байт
+	trans_com(id_m,com_m,ask,true);
+	delay (2000);
+	//_________________
+	id_m = 10;
+	com_m = 11;             // "выключить"...
+	data[0] = 1;                                            //...первую лампу...
+	data[1] = 3;                                                                    //...третью лампу...
+	data[2] = 5;            //...пятую лампу
+	nn=3;                 // количество данных 2 байта
+	trans_com(id_m,com_m,ask,true);
+	delay(2000);
+	//_________________
+	id_m = 10;
+	com_m = 11;              // "выключить"...
+	data[0] = 0;             // "все"
+	nn=1;
+	trans_com(id_m,com_m,ask,true);
+	delay(2000);
 }
 
-// void read_data(){
-// 	pc.println();pc.print("readdata=");
-// 	for (byte i=0; i<nn; i++){
-// 		pc.print(char(data[i]));
-// 	}
-// 	pc.println();
-// }
-
-// void write_data(){
-// 	nn = 5;
-// 	for (byte i=0; i<nn; i++){
-// 		data[i]=i+97;
-// 	}
-// }
-
 void trans_com(byte id, byte com, char type_packet, boolean data_b){   //функция передачи в линию
-	unsigned int mm;
-	if (data_b) mm=(nn+4); else mm=3;
-  //byte net_packet[mm];
-  pc.println();
-  pc.print("mm=");pc.println(mm);
-  pc.print("nn=");pc.println(nn);
-	pc.println();pc.println(F("_________________:")); pc.print(F(" id=")); pc.print(id); pc.print(F(" com=")); pc.println(com);
+	unsigned int mm;                     //конечное количество байтов в пакете, без '>' и crc
+	if (data_b) mm=(nn+4+1); else mm=4;    //5=id+type_packet+com+индекс_nn+'>'
+	//byte net_packet[mm];
+	pc.println();
+	pc.print("mm="); pc.println(mm);
+	pc.print("nn="); pc.println(nn);
+	pc.println(); pc.println(F("_________________:")); pc.print(F(" id=")); pc.print(id); pc.print(F(" com=")); pc.println(com);
 	digitalWrite(led_pin, HIGH);
 	digitalWrite(pin_tr, HIGH);
 	net_packet[0] = id;
 	net_packet[1] = byte(type_packet);
 	net_packet[2] = com;
-  pc.println();
+	pc.println();
 	if (data_b) {                               //если данные нужно передавать, дополнительно грузим в массив блок данных, количеством nn
-                                 //если данные, то помещаем 4 байтом размер данных
+		//если данные, то помещаем 4 байтом размер данных
 		net_packet[3] = nn;
 		for (byte i=0; i<nn; i++) {
 			net_packet[4+i] = data[i];                 //данные - льём их в пакет
@@ -123,10 +108,10 @@ void trans_com(byte id, byte com, char type_packet, boolean data_b){   //фун�
 
 	Serial.print('>');
 	//pc.print(" crc"); pc.println(CRC8.smbus(net_packet, mm));
-  //pc.print("sizeof="); pc.println(sizeof(net_packet));
+	//pc.print("sizeof="); pc.println(sizeof(net_packet));
 	Serial.print(char(CRC8.smbus(net_packet, mm)));
-  pc.print("crc_outgoing="); pc.println(CRC8.smbus(net_packet, mm));
-	for (byte i=0; i<=mm; i++) {
+	pc.print("crc_outgoing="); pc.println(CRC8.smbus(net_packet, mm));
+	for (byte i=0; i<mm; i++) {
 		Serial.print (char(net_packet[i]));
 	}
 
@@ -135,19 +120,17 @@ void trans_com(byte id, byte com, char type_packet, boolean data_b){   //фун�
 	digitalWrite(pin_tr, LOW);
 
 	recive_com(id);
-	if (flag_net){
-		pc.println();pc.print(F("response: "));pc.print(F("id="));pc.print(alien_id);pc.print(F(" com="));pc.println(responce);
+	if (flag_net) {
+		pc.println(); pc.print(F("response: ")); pc.print(F("id=")); pc.print(alien_id); pc.print(F(" com=")); pc.println(responce);
 	}
 	else{
-		pc.println();pc.println(F("not response"));
+		pc.println(); pc.println(F("not response"));
 	}
-  //delete[] net_packet;
 }
 
 
 void recive_com(byte id){                      //прием пакета
 	int count = 0;
-	//char net_packet[value_data];
 	count = 0;
 	char ch;
 	unsigned long time_n;
@@ -165,64 +148,65 @@ void recive_com(byte id){                      //прием пакета
 			//flag_net = true;
 			//devel_off
 			ch = Serial.read();                                     //читаем что прилетело, заодно чистим буфер если сыпется мусор на линии
-			//pc.print(ch);
 			if (ch == '>' && !begin_of_packet) {
 				begin_of_packet = true;
-
+				count = 0;
 			}
 			if (begin_of_packet) {                          //если был начало пакета '>'
 				net_packet[count] = ch;                         // пишем в пакет
 				if (net_packet[count] == '<') {
 					byte crc_incoming;                                                                                              //начало функции высчитывания crc
 					byte crc_calc;
-					//byte buf[count-2]; //-2 crc идет вторым байтом, поэтому считаем с третьего
-					//for (byte i=2; i<=count; i++) {
-					//	buf[i-2] = byte(net_packet[i]);
-					//}
+
 					crc_incoming = byte(net_packet[1]);
-					crc_calc = CRC8.smbus(&net_packet[2], count-2);        //конец функции подсчета crc
-          pc.println();
-          pc.print("CRC_incoming=");pc.println(crc_incoming);
-          pc.print("CRC_calc=");pc.println(crc_calc);
-          pc.print("count=");pc.println(count);
+					crc_calc = CRC8.smbus(&net_packet[2], count-1);        //конец функции подсчета crc
+
+					pc.println();
+					pc.print("CRC_incoming="); pc.println(crc_incoming);
+					pc.print("CRC_calc="); pc.println(crc_calc);
+					pc.print("count="); pc.println(count);
+
 					if (crc_incoming == crc_calc) {
 						if ((byte(net_packet[2])) == id) { //если id верный, то
 							responce = byte (net_packet[4]);        //получаем команду
 							if (net_packet[5] != '<') {             //проверяем наличие данных и если есть - пишем
-								pc.print("data_nn=");pc.print(byte(net_packet[5]));
+								pc.print("data_in_nn="); pc.print(byte(net_packet[5]));
 								flag_data = true;
 								flag_net = true;
 								nn = net_packet[5];
-								// pc.println();pc.print("debug=");
-								 for (byte i=0; i<nn; i++) {
-								 	data[i] = net_packet[6+i];
-								// 	pc.print(char(data[i]));
-								 }
-							} else {
+								for (byte i=0; i<nn; i++) {
+									data[i] = net_packet[6+i];
+								}
+							}
+							else {
 								flag_data = false;
 								flag_net = true;
 							}
 							break;
-						} else {
-							begin_of_packet = false;
-							count = 0;
 						}
-					} else {
-            pc.println();
-            pc.println("CRC_incoming error");
-          }
+						else {
+              pc.print("Wrong_id_answer");
+              break;
+							//begin_of_packet = false;
+						}
+					}
+					else {
+						pc.println();
+						pc.println("CRC_incoming error");
+            // begin_of_packet = false;
+            break;
+					}
 				}
 				if ((millis()-time_n) > timeout_packet) {
-					pc.println();pc.println("begin timeout");
-					break;
-					// begin_of_packet = false;
-					// count = 0;
+					pc.println(); pc.println("begin timeout");
+          //begin_of_packet = false;
+					 break;
 				} else count++;
 			}
 		}
-		if ((millis()-time_n) > timeout_packet) {
-			pc.println();pc.println("net timeout");
-			break;
-		}
+		// if ((millis()-time_n) > timeout_packet) {
+		// 	pc.println(); pc.println("net timeout");
+		// 	break;
+		// }
 	}
 }
