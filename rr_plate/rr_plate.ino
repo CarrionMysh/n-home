@@ -47,7 +47,7 @@ SoftwareSerial pc(rx_pc, tx_pc);
 unsigned long timeout_packet;           //таймаут приема пакета, при наличии, мс
 unsigned long timeout_tick;             //таймаут прослушки линии без пакета, чтобы не висеть постояно в цикле прослушки, мс
 byte com=0;               //команда полученная с линии
-void f
+
 void setup() {
 	SPI.begin();
 	pinMode(PIN_SPI_SS, OUTPUT);
