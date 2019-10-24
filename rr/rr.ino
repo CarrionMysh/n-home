@@ -53,26 +53,6 @@ void setup() {
 void loop(){
 	recive_com();
 	job();
-	// //devel_on
-	// if (flag_net) {
-	//      pc.println("_________________");
-	//      pc.print("com: "); pc.println(com);
-	// switch (com) {                                                          //тестовая заготовка обработки пакетов
-	// case 3:
-	//      digitalWrite(pin_relay, HIGH);
-	//      digitalWrite(led_pin, HIGH);
-	//      if (flag_data) read_data();										//полчили данные и пишем их куда-то
-	//      write_data();																	//где-то считали данные и пишем в дату
-	//      response(self_id, ok, '&', true);
-	//      break;
-	// case 12:
-	//      digitalWrite(pin_relay, LOW);
-	//      digitalWrite(led_pin, LOW);
-	//      response(self_id, ok, '&', false);
-	//      break;
-	// }
-	// //devel_off
-	// }
 }
 
 void job(){                                     //обработчик команд
@@ -251,7 +231,6 @@ void recive_com(){                      //прием пакета
 				if ((millis()-time_n) > timeout_packet) {
 					pc.println(); pc.println("begin timeout");
 					begin_of_packet = false;
-					// count = 0;
 					// break;
 				}
 				else count++;
