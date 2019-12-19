@@ -20,7 +20,7 @@ byte packet_error = 99;         // ошибка целостности паке�
 byte data_error = 100;          //ошибка целостности пакета
 byte timeout_error = 93;
 byte data[254];       //массив для данных
-byte net_packet[5];
+byte net_packet[6];
 byte nn;              //размер блока ланных
 byte com;                               //команда полученная с линии
 unsigned int timeout_packet = 10;
@@ -60,7 +60,7 @@ void job(){                                     //обработчик кома�
 				triac_level_bright[data[i]] = data[1];         //дергаем номер симистора из блока данных, яркость data[1]
 			}
 		}
-		response(self_id, ok, 0);
+		response(alien_id, ok, 0);
 		break;
 	case 11:                                          //"выключить"
 		if (data[0] == 0) {                             //"все"
@@ -73,7 +73,7 @@ void job(){                                     //обработчик кома�
 				triac_level_bright[data[i]] = step_bri;         //дергаем из data[] номера симисторов и гасим их яркостью 128
 			}
 		}
-		response(self_id, ok, 0);
+		response(alien_id, ok, 0);
 		break;
 	case 12:                                          //"убавить"
 		if (data[0] == 0) {                             //"все"
@@ -121,11 +121,11 @@ void job(){                                     //обработчик кома�
 		break;
 	case 18:                        //"отключить реле"
 		digitalWrite(pin_relay, HIGH);
-		response(self_id, ok, 0);
+		response(alien_id, ok, 0);
 		break;
 	case 19:                        //"включить реле"
 		digitalWrite(pin_relay, LOW);
-		response(self_id, ok, 0);
+		response(alien_id, ok, 0);
 		break;
 	}
 	com = 0;                        //обнуляем значение команды после отработки
@@ -137,25 +137,29 @@ byte recive_com(){                //прием пакета
 	boolean begin_of_packet = false;         //флаг начала пакета
 	byte crc_incoming;
 	byte crc_calc;
-	unsigned int timeout_tick = 50;          //таймаут между двумя байтами
-	unsigned long time_tick = millis();
+	unsigned long timeout_tick = 500;          //таймаут между двумя байтами
+	unsigned long time_tick;
 	// flag_net = false;
 	flag_data = false;                       //флаг наличия даты, пока никак не задействован
+  time_tick = millis();
 	while(true) {                            //слушаем "вечно"
-		if (begin_of_packet && (millis()-time_tick > timeout_tick)) {     //проверям таймаут
+		if (begin_of_packet && ((millis()-time_tick) > timeout_tick)) {     //проверям таймаут
+      pc.println("timeout_error_packet");
 			return(timeout_error);
 		}
 		if (Serial.available()) {
 			ch=Serial.read();
-			if (ch = '>' && !begin_of_packet) {  //проверка на начала пакета
-				begin_of_packet = true;
-				count = 0;
-				time_tick = millis();
-			}
+      if ((ch == '>') && !begin_of_packet) {  //проверка на начало пакета
+        begin_of_packet = true;
+        count = 0;
+        time_tick = millis();
+        pc.println("begin true");
+      }
 			if (begin_of_packet) {               //и если начало пакета было, дальше пляшем от этого
 				net_packet[count] = ch;
 				time_tick = millis();
-				if (count == 5) {                  //по "дизайну" у нас пакет длиной в пять байт
+        pc.print("count=");pc.print(count);pc.print(" ch=");pc.println(net_packet[count]);
+				if (count == 5) {                  //по "дизайну" у нас пакет длиной в шесть байт
 					crc_incoming = net_packet[1];
 					crc_calc = CRC8.smbus(&net_packet[2],4); //в пакете отбрасываем признак начала пакета и CRC
 					if (crc_incoming == crc_calc) {          //проверяем crc
@@ -164,9 +168,11 @@ byte recive_com(){                //прием пакета
 							alien_id = net_packet[3];
 							nn = net_packet[5];
 							if (nn != 0) {                       //если 6 байт не нулевой, значит будет дата
+                pc.println("data_find");
 								count = 0;                         //и заново начинаем принимать, уже дату
 								while (count <= nn) {              //и покрутилось все вновь, CRC+nn
 									if (millis()-time_tick > timeout_tick) {   //проверка на таймаут
+                    pc.println("timeout_error_data");
 										return(timeout_error);
 									}
 									if (Serial.available()) {
@@ -176,6 +182,7 @@ byte recive_com(){                //прием пакета
 										}
 										else {
 											data[count-1] = ch;          //иначе пишем дату
+                      pc.print("data[");pc.print(count-1);pc.print("]=");pc.println(data[count-1]);
 										}
 										count++;
 										time_tick = millis();
@@ -184,21 +191,29 @@ byte recive_com(){                //прием пакета
 								crc_calc = CRC8.smbus(data,nn);    //crc даты
 								if (crc_incoming == crc_calc) {
 									flag_data = true;
+                  pc.println("data_ok");
 									return (ok);
 								}
 								else{
+                  pc.println("data_crc_error");
 									return (data_error);
 								}
 							}
+              pc.println("packet_ok");
 							return (ok);
 						} //не наш id -- не реагируем.
+            begin_of_packet = false;  //и сбрасываем флаг начала пакета
+            pc.println("wrong_id");
 					}
 					else {
+            pc.println("packet_crc_error");
 						return (packet_error);
 					}
 				}
+
 				count++;                      //счетчик байтов. все проверили, отработали - щелкнули
 			}
+
 		}
 	}
 }

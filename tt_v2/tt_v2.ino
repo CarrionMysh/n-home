@@ -19,8 +19,9 @@ byte ok=94;                                //рабочий вариант от�
 byte packet_error = 99;                    // ошибка целостности пакета
 byte data_error = 100;                     //ошибка целостности пакета
 byte timeout_error = 93;
+byte timeout_silent = 92;
 byte data[254];                            //массив для данных
-byte net_packet[5];
+byte net_packet[6];
 byte response;
 //devel on
 boolean flag_net;
@@ -56,6 +57,7 @@ void loop(){
 	// trans_com(id_m,com_m,ask,false);
 	// delay (2000);
 	//_________________
+
 	id_m = 10;
 	com_m = 10;                        //"включить""
 	data[0] = 0;                       //из принципа обмена: 0 = "все"
@@ -114,16 +116,23 @@ byte trans_com(byte id, byte com_c, byte nn_data){
 	byte crc_incoming;
 	byte crc_calc;
 	unsigned int timeout_tick = 50;          //от фонаря (пока)
-	unsigned long time_tick  =millis();
+	unsigned long time_tick = millis();
+  unsigned int timeout_response = 50;
+  unsigned long time_packet = millis();
 	response = 0;                            //сие есть аналог com для слэйва, код ответа от слэйва
 	flag_data = false;                       //флаг наличия даты, пока никак не задействован
 	while(true) {
     if (begin_of_packet && (millis()-time_tick > timeout_tick)){  //проверка таймаута между байтами
+      pc.println("timeout_error_tick1");
       return (timeout_error);
+    }
+    if (!begin_of_packet && (millis()-time_packet > timeout_packet)){
+      pc.println("timeout_silent");
+      return (timeout_silent);
     }
 		if (Serial.available()) {
 			ch = Serial.read();
-			if (ch = '>' && !begin_of_packet) {      //провека на начало пакета
+			if ((ch == '>') && !begin_of_packet) {      //проверка на начало пакета
 				begin_of_packet = true;
 				count = 0;
 				time_tick = millis();                  //здесь и далее - обновляем время для вновь пришедшего байта
@@ -131,6 +140,7 @@ byte trans_com(byte id, byte com_c, byte nn_data){
 			if (begin_of_packet) {                   //и если начало пакета было, дальше пляшем от этого
 				net_packet[count] = ch;
 				time_tick = millis();
+        pc.print("count=");pc.print(count);pc.print(" ch=");pc.println(net_packet[count]);
 				if (count == 5) {                       //по "дизайну" у нас пакет длиной в шесть байт
 					crc_incoming = net_packet[1];
 					crc_calc = CRC8.smbus(&net_packet[2],4);
@@ -143,6 +153,7 @@ byte trans_com(byte id, byte com_c, byte nn_data){
 								count = 0;
 								while (count <= nn) {
                   if (millis()-time_tick > timeout_tick){
+                    pc.println("timeout_error2");
                     return (timeout_error);
                   }
 									if (Serial.available()) {
@@ -160,16 +171,21 @@ byte trans_com(byte id, byte com_c, byte nn_data){
 								crc_calc = CRC8.smbus(data,nn);
 								if (crc_calc == crc_incoming) {
 									flag_data = true;
+                  pc.println("data_ok");
 									return (ok);
 								}
 								else{
+                  pc.println("data_crc_error");
 									return (data_error);
 								}
 							}
+              pc.println("packet_ok");
 							return (ok);
-						} //не свой id. есть мысли логировать и чужие пакеты. пока пропускаем
+						}
+            pc.println("wrong_id");//не свой id. есть мысли логировать и чужие пакеты. пока пропускаем
 					}
 					else {
+            pc.println("packet_crc_error");
 						return (packet_error);
 					}
 				}
