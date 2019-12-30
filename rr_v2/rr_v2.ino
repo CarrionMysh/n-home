@@ -60,7 +60,13 @@ void job(){                                     //обработчик кома�
 				triac_level_bright[data[i]] = data[1];         //дергаем номер симистора из блока данных, яркость data[1]
 			}
 		}
-		response(alien_id, ok, 0);
+
+    //debug_on
+    for (byte i = 0; i<=254; i++){
+      data[i] = i;
+    }
+    //debug_off ==201
+		response(alien_id, ok, 128);
 		break;
 	case 11:                                          //"выключить"
 		if (data[0] == 0) {                             //"все"
@@ -230,10 +236,12 @@ void response(byte id, byte com_c, byte nn_data){
 		Serial.print(char(net_packet[i]));
 	}
 	if(nn_data != 0) {
+    delay(10);
 		Serial.print(char(CRC8.smbus(data, nn_data)));
-		for (byte i=0; i<nn_data; i++) {
-			Serial.print(char(data[i]));
-		}
+		// for (int i=0; i<nn_data; i++) {
+		// 	Serial.print(char(data[i]));
+		// }
+    Serial.write(data,nn_data);
 	}
 	delay(tx_ready_delay);
 	digitalWrite(pin_tr, LOW);

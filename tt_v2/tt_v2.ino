@@ -158,6 +158,8 @@ byte trans_com(byte id, byte com_c, byte nn_data){
                   }
 									if (Serial.available()) {
 										ch = Serial.read();
+                    pc.print("ch=");pc.println(byte(ch));
+                    pc.print("count=");pc.println(count);
 										if (count == 0) {
 											crc_incoming = ch;
 										}
