@@ -44,12 +44,13 @@ void setup(){
 	nn = 0;
 	flag_net = false;
 	flag_data = false;
+
 }
 void loop(){
 	id_m = 10;
 	com_m = 18;                        // "отключить реле"
 	nn = 0;
-	trans_com(id_m,com_m,nn);
+	trans_com(id_m,com_m);
 	delay (2000);
 	//_________________
 	// id_m = 10;
@@ -62,27 +63,32 @@ void loop(){
 	com_m = 10;                        //"включить""
 	data[0] = 0;                       //из принципа обмена: 0 = "все"
 	nn=1;                              //количество данных 1 байт
-	trans_com(id_m,com_m,nn);
+	trans_com(id_m,com_m);
 	delay (2000);
 	//_________________
 	id_m = 10;
 	com_m = 11;                        // "выключить"...
-	data[0] = 1;                       //...первую лампу...
-	data[1] = 3;                       //...третью лампу...
-	data[2] = 5;                       //...пятую лампу
-	nn=3;                              // количество данных 2 байта
-	trans_com(id_m,com_m,nn);
+	// data[0] = 1;                       //...первую лампу...
+	// data[1] = 3;                       //...третью лампу...
+	// data[2] = 5;                       //...пятую лампу
+  //debug_on
+  for (byte ii=0; ii<254; ii++){
+    data[ii] = ii+1;
+  }
+  //debug_off
+	nn=100;                              // количество данных 2 байта
+	trans_com(id_m,com_m);
 	delay(2000);
 	//_________________
 	id_m = 10;
 	com_m = 11;                        // "выключить"...
 	data[0] = 0;                       // "все"
 	nn=1;
-	trans_com(id_m,com_m,nn);
+	trans_com(id_m,com_m);
 	delay(2000);
 }
 
-byte trans_com(byte id, byte com_c, byte nn_data){
+byte trans_com(byte id, byte com_c){
 //_________________
 //секция передачи
 //_________________
@@ -91,15 +97,15 @@ byte trans_com(byte id, byte com_c, byte nn_data){
 	net_packet[0] = id;
 	net_packet[1] = self_id;
 	net_packet[2] = com_c;
-	net_packet[3] = nn_data;
+	net_packet[3] = nn;
 	Serial.print('>');                 //отдаем начало пакета
 	Serial.print(char(CRC8.smbus(net_packet,4)));      //и туда же crc
 	for (byte i = 0; i<4; i++) {                       //и туда же содержимое пакета
 		Serial.print(char(net_packet[i]));
 	}
-	if(nn_data != 0) {                 //если передаваемое в функцию кол-во даты не нулевое
-		Serial.print(char(CRC8.smbus(data, nn_data)));  //то вещаем CRC даты
-		for (byte i=0; i<nn_data; i++) {                //и саму дату
+	if(nn != 0) {                 //если передаваемое в функцию кол-во даты не нулевое
+		Serial.print(char(CRC8.smbus(data, nn)));  //то вещаем CRC даты
+		for (byte i=0; i<nn; i++) {                //и саму дату
 			Serial.print(char(data[i]));
 		}
 	}
@@ -115,84 +121,147 @@ byte trans_com(byte id, byte com_c, byte nn_data){
 	boolean begin_of_packet = false;
 	byte crc_incoming;
 	byte crc_calc;
-	unsigned int timeout_tick = 50;          //от фонаря (пока)
+	unsigned int timeout_tick = 10;          //от фонаря (пока)
 	unsigned long time_tick = millis();
-  unsigned int timeout_response = 50;
-  unsigned long time_packet = millis();
+	unsigned int timeout_response = 50;
+  Serial.setTimeout(timeout_tick);
+	// unsigned long time_packet = millis();
 	response = 0;                            //сие есть аналог com для слэйва, код ответа от слэйва
 	flag_data = false;                       //флаг наличия даты, пока никак не задействован
-	while(true) {
-    if (begin_of_packet && (millis()-time_tick > timeout_tick)){  //проверка таймаута между байтами
-      pc.println("timeout_error_tick1");
-      return (timeout_error);
-    }
-    if (!begin_of_packet && (millis()-time_packet > timeout_packet)){
+	while(true) {                           //слушаем "вечно"
+    if ((millis()-time_tick) > timeout_response){
       pc.println("timeout_silent");
       return (timeout_silent);
     }
 		if (Serial.available()) {
 			ch = Serial.read();
-			if ((ch == '>') && !begin_of_packet) {      //проверка на начало пакета
-				begin_of_packet = true;
-				count = 0;
-				time_tick = millis();                  //здесь и далее - обновляем время для вновь пришедшего байта
-			}
-			if (begin_of_packet) {                   //и если начало пакета было, дальше пляшем от этого
-				net_packet[count] = ch;
-				time_tick = millis();
-        pc.print("count=");pc.print(count);pc.print(" ch=");pc.println(net_packet[count]);
-				if (count == 5) {                       //по "дизайну" у нас пакет длиной в шесть байт
-					crc_incoming = net_packet[1];
-					crc_calc = CRC8.smbus(&net_packet[2],4);
-					if (crc_incoming == crc_calc) {
-						if (net_packet[2] == self_id) {
-							response = net_packet[4];
-							alien_id = net_packet[3];
-							nn = net_packet[5];
-							if (nn != 0) {
-								count = 0;
-								while (count <= nn) {
-                  if (millis()-time_tick > timeout_tick){
-                    pc.println("timeout_error2");
-                    return (timeout_error);
-                  }
-									if (Serial.available()) {
-										ch = Serial.read();
-                    pc.print("ch=");pc.println(byte(ch));
-                    pc.print("count=");pc.println(count);
-										if (count == 0) {
-											crc_incoming = ch;
-										}
-										else {
-											data[count-1] = ch;
-										}
-										count++;
-										time_tick = millis();
-									}
+			time_tick = millis();
+			if (ch == '>') { //видим начало пакета
+				Serial.readBytes(net_packet,5); //читаем с линии пять байтов пакета
+				if ((millis()-time_tick) > timeout_tick) { //если вылетели по таймауту Serial, мы этого не узнаем, поэтому проверям таймаут руками
+					pc.println("timeout_error_packet");
+					return(timeout_error);
+				}
+				crc_incoming = net_packet[0];
+				crc_calc = CRC8.smbus(&net_packet[1],4); //для проверки отбрасываем приходящее CRC в пакете
+				if (crc_incoming == crc_calc) { //CRC верно
+					if (net_packet[1] == self_id) { //наш ли пакет
+						alien_id = net_packet[2];
+						response = net_packet[3];
+						nn = net_packet[4];
+						if (nn != 0) { //если 5 байт не нулевой, значит будет data
+							pc.println("data_find");
+							time_tick = millis();
+							while(true) {
+								if (Serial.available()) { //ловим дату
+									crc_incoming = Serial.read(); //первый байт это crc
+									Serial.readBytes(data,nn); //и читаем-пишем data
+									break; //ломаем цикл даты
 								}
-								crc_calc = CRC8.smbus(data,nn);
-								if (crc_calc == crc_incoming) {
-									flag_data = true;
-                  pc.println("data_ok");
-									return (ok);
-								}
-								else{
-                  pc.println("data_crc_error");
+								if ((millis()-time_tick) > timeout_tick) { //страховка, если даты вообще не будет. проверка с времени последнего байта
+									pc.println("data_silence");
 									return (data_error);
 								}
 							}
-              pc.println("packet_ok");
+							//дата залилась, иначе уловие выше выбьет таймауту
+							crc_calc = CRC8.smbus(data,nn); //crc даты
+							if (crc_incoming == crc_calc) { //проверка на crc дату
+								flag_data = true;
+								pc.println("data_ok");
+                pc.print("data[nn]=");pc.println(data[nn]);
+								return (ok);
+							}
+							else {
+								pc.println("data_crc_error");
+								return (data_error);
+							}
+						}
+						else { //5 байт нулевой, даты не будет
+							pc.println("packet_ok");
 							return (ok);
 						}
-            pc.println("wrong_id");//не свой id. есть мысли логировать и чужие пакеты. пока пропускаем
 					}
-					else {
-            pc.println("packet_crc_error");
-						return (packet_error);
+					else { // пакет не нам
+						pc.println("wrong_id");
 					}
 				}
-				count++;
+				else {
+					pc.println("packet_crc_error");
+					return (packet_error);
+				}
 			}
 		}
+		// if (begin_of_packet && (millis()-time_tick > timeout_tick)) { //проверка таймаута между байтами
+		// 	pc.println("timeout_error_tick1");
+		// 	return (timeout_error);
+		// }
+		// if (!begin_of_packet && (millis()-time_packet > timeout_packet)) {
+		// 	pc.println("timeout_silent");
+		// 	return (timeout_silent);
+		// }
+		// if (Serial.available()) {
+		// 	ch = Serial.read();
+		// 	if ((ch == '>') && !begin_of_packet) {      //проверка на начало пакета
+		// 		begin_of_packet = true;
+		// 		count = 0;
+		// 		time_tick = millis();                  //здесь и далее - обновляем время для вновь пришедшего байта
+		// 	}
+		// 	if (begin_of_packet) {                   //и если начало пакета было, дальше пляшем от этого
+		// 		net_packet[count] = ch;
+		// 		time_tick = millis();
+		// 		pc.print("count="); pc.print(count); pc.print(" ch="); pc.println(net_packet[count]);
+		// 		if (count == 5) {                       //по "дизайну" у нас пакет длиной в шесть байт
+		// 			crc_incoming = net_packet[1];
+		// 			crc_calc = CRC8.smbus(&net_packet[2],4);
+		// 			if (crc_incoming == crc_calc) {
+		// 				if (net_packet[2] == self_id) {
+		// 					response = net_packet[4];
+		// 					alien_id = net_packet[3];
+		// 					nn = net_packet[5];
+		// 					if (nn != 0) {
+		// 						count = 0;
+		// 						while (count <= nn) {
+		// 							if (millis()-time_tick > timeout_tick) {
+		// 								pc.println("timeout_error2");
+		// 								return (timeout_error);
+		// 							}
+		// 							if (Serial.available()) {
+		// 								ch = Serial.read();
+		// 								pc.print("ch="); pc.println(byte(ch));
+		// 								pc.print("count="); pc.println(count);
+		// 								if (count == 0) {
+		// 									crc_incoming = ch;
+		// 								}
+		// 								else {
+		// 									data[count-1] = ch;
+		// 								}
+		// 								count++;
+		// 								time_tick = millis();
+		// 							}
+		// 						}
+		// 						crc_calc = CRC8.smbus(data,nn);
+		// 						if (crc_calc == crc_incoming) {
+		// 							flag_data = true;
+		// 							pc.println("data_ok");
+		// 							return (ok);
+		// 						}
+		// 						else{
+		// 							pc.println("data_crc_error");
+		// 							return (data_error);
+		// 						}
+		// 					}
+		// 					pc.println("packet_ok");
+		// 					return (ok);
+		// 				}
+		// 				pc.println("wrong_id");//не свой id. есть мысли логировать и чужие пакеты. пока пропускаем
+		// 			}
+		// 			else {
+		// 				pc.println("packet_crc_error");
+		// 				return (packet_error);
+		// 			}
+		// 		}
+		// 		count++;
+		// 	}
+		// }
 	}
 }

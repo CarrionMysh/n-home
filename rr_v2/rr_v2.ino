@@ -10,6 +10,7 @@
 #define pin_relay 7             //пин для реле
 #define tx_pc 5                                   //serial pc alfa
 #define rx_pc 6
+#define default_timeout_Serial 100        //дефолтовый таймаут
 volatile byte triac_level_bright[7];      //заданный уровень яркости 128..0 для 8 симмисторов
 const byte step_bri = 128;                //количество уровней яркости 0 = ON, 128 = OFF
 byte triacs = 8;                          //количество симмисторов/каналов
@@ -61,11 +62,11 @@ void job(){                                     //обработчик кома�
 			}
 		}
 
-    //debug_on
-    for (byte i = 0; i<=254; i++){
-      data[i] = i;
-    }
-    //debug_off ==201
+		//debug_on
+		for (byte i = 0; i<=254; i++) {
+			data[i] = i;
+		}
+		//debug_off ==201
 		response(alien_id, ok, 128);
 		break;
 	case 11:                                          //"выключить"
@@ -143,83 +144,68 @@ byte recive_com(){                //прием пакета
 	boolean begin_of_packet = false;         //флаг начала пакета
 	byte crc_incoming;
 	byte crc_calc;
-	unsigned long timeout_tick = 500;          //таймаут между двумя байтами
+	unsigned long timeout_tick = 10;          //таймаут между двумя байтами
 	unsigned long time_tick;
-	// flag_net = false;
 	flag_data = false;                       //флаг наличия даты, пока никак не задействован
-  time_tick = millis();
+	time_tick = millis();
+	Serial.setTimeout(timeout_tick);
 	while(true) {                            //слушаем "вечно"
-		if (begin_of_packet && ((millis()-time_tick) > timeout_tick)) {     //проверям таймаут
-      pc.println("timeout_error_packet");
-			return(timeout_error);
-		}
 		if (Serial.available()) {
-			ch=Serial.read();
-      if ((ch == '>') && !begin_of_packet) {  //проверка на начало пакета
-        begin_of_packet = true;
-        count = 0;
-        time_tick = millis();
-        pc.println("begin true");
-      }
-			if (begin_of_packet) {               //и если начало пакета было, дальше пляшем от этого
-				net_packet[count] = ch;
-				time_tick = millis();
-        pc.print("count=");pc.print(count);pc.print(" ch=");pc.println(net_packet[count]);
-				if (count == 5) {                  //по "дизайну" у нас пакет длиной в шесть байт
-					crc_incoming = net_packet[1];
-					crc_calc = CRC8.smbus(&net_packet[2],4); //в пакете отбрасываем признак начала пакета и CRC
-					if (crc_incoming == crc_calc) {          //проверяем crc
-						if(net_packet[2] == self_id) {         //проверяем нам ли пакет
-							com = net_packet[4];
-							alien_id = net_packet[3];
-							nn = net_packet[5];
-							if (nn != 0) {                       //если 6 байт не нулевой, значит будет дата
-                pc.println("data_find");
-								count = 0;                         //и заново начинаем принимать, уже дату
-								while (count <= nn) {              //и покрутилось все вновь, CRC+nn
-									if (millis()-time_tick > timeout_tick) {   //проверка на таймаут
-                    pc.println("timeout_error_data");
-										return(timeout_error);
-									}
-									if (Serial.available()) {
-										ch = Serial.read();
-										if (count == 0) {              //первый байт после пакета - CRC блока даты
-											crc_incoming = ch;
-										}
-										else {
-											data[count-1] = ch;          //иначе пишем дату
-                      pc.print("data[");pc.print(count-1);pc.print("]=");pc.println(data[count-1]);
-										}
-										count++;
-										time_tick = millis();
-									}
+			ch = Serial.read();
+			time_tick = millis();
+			if (ch == '>') { //видим начало пакета
+				Serial.readBytes(net_packet,5); //читаем с линии пять байтов пакета
+				if ((millis()-time_tick) > timeout_tick) { //если вылетели по таймауту Serial, мы этого не узнаем, поэтому проверям таймаут руками
+					pc.println("timeout_error_packet");
+					return(timeout_error);
+				}
+				crc_incoming = net_packet[0];
+				crc_calc = CRC8.smbus(&net_packet[1],4); //для проверки отбрасываем приходящее CRC в пакете
+				if (crc_incoming == crc_calc) { //CRC верно
+					if (net_packet[1] == self_id) { //наш ли пакет
+						alien_id = net_packet[2];
+						com = net_packet[3];
+						nn = net_packet[4];
+						if (nn != 0) { //если 5 байт не нулевой, значит будет data
+							pc.println("data_find");
+							time_tick = millis();
+							while(true) {
+								if (Serial.available()) { //ловим дату
+									crc_incoming = Serial.read(); //первый байт это crc
+									Serial.readBytes(data,nn); //и читаем-пишем data
+									break; //ломаем цикл даты
 								}
-								crc_calc = CRC8.smbus(data,nn);    //crc даты
-								if (crc_incoming == crc_calc) {
-									flag_data = true;
-                  pc.println("data_ok");
-									return (ok);
-								}
-								else{
-                  pc.println("data_crc_error");
+								if ((millis()-time_tick) > timeout_tick) { //страховка, если даты вообще не будет. проверка с времени последнего байта
+									pc.println("data_silence");
 									return (data_error);
 								}
 							}
-              pc.println("packet_ok");
+							//дата залилась, иначе уловие выше выбьет таймауту
+							crc_calc = CRC8.smbus(data,nn); //crc даты
+							if (crc_incoming == crc_calc) { //проверка на crc дату
+								flag_data = true;
+								pc.println("data_ok");
+								return (ok);
+							}
+							else {
+								pc.println("data_crc_error");
+								return (data_error);
+							}
+						}
+						else { //5 байт нулевой, даты не будет
+							pc.println("packet_ok");
 							return (ok);
-						} //не наш id -- не реагируем.
-            begin_of_packet = false;  //и сбрасываем флаг начала пакета
-            pc.println("wrong_id");
+						}
 					}
-					else {
-            pc.println("packet_crc_error");
-						return (packet_error);
+					else { // пакет не нам
+						pc.println("wrong_id");
 					}
 				}
-
-				count++;                      //счетчик байтов. все проверили, отработали - щелкнули
+				else {
+					pc.println("packet_crc_error");
+					return (packet_error);
+				}
 			}
-
 		}
 	}
 }
@@ -236,12 +222,9 @@ void response(byte id, byte com_c, byte nn_data){
 		Serial.print(char(net_packet[i]));
 	}
 	if(nn_data != 0) {
-    delay(10);
+		delay(10);
 		Serial.print(char(CRC8.smbus(data, nn_data)));
-		// for (int i=0; i<nn_data; i++) {
-		// 	Serial.print(char(data[i]));
-		// }
-    Serial.write(data,nn_data);
+		Serial.write(data,nn_data);
 	}
 	delay(tx_ready_delay);
 	digitalWrite(pin_tr, LOW);
