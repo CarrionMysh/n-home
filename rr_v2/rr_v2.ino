@@ -4,39 +4,36 @@
 #include <FastCRC.h>
 #include <FastCRC_cpu.h>
 #include <SoftwareSerial.h>
-
 #define pin_tr 4                          //пин transmission enable для max485
 #define tx_ready_delay 1                  //задержка для max485 (буфер? вообщем, неопределенность буфераmax485)
-#define pin_relay 7             //пин для реле
-#define tx_pc 5                                   //serial pc alfa
+#define pin_relay 7                       //пин для реле
+#define tx_pc 5                           //serial pc alfa
 #define rx_pc 6
-#define default_timeout_Serial 100        //дефолтовый таймаут
 volatile byte triac_level_bright[7];      //заданный уровень яркости 128..0 для 8 симмисторов
 const byte step_bri = 128;                //количество уровней яркости 0 = ON, 128 = OFF
 byte triacs = 8;                          //количество симмисторов/каналов
-byte self_id=10;
-byte alien_id;
-byte ok=94;                     //рабочий вариант ответа 94 '^'
-byte packet_error = 99;         // ошибка целостности пакета
-byte data_error = 100;          //ошибка целостности пакета
-byte timeout_error = 93;
-byte data[254];       //массив для данных
-byte net_packet[6];
-byte nn;              //размер блока ланных
-byte com;                               //команда полученная с линии
-unsigned int timeout_packet = 10;
-boolean flag_net;               //флаг получения пакета
-boolean flag_data;    //флаг наличия в пакете данных
-FastCRC8 CRC8;
-SoftwareSerial pc(rx_pc, tx_pc);                                   //serial_pc
+byte self_id=10;                          //собвственный id
+byte alien_id;                            //id не свой
+byte ok=94;                               //рабочий вариант ответа 94 '^'
+byte packet_error = 99;                   //ошибка целостности пакета
+byte data_error = 100;                    //ошибка целостности пакета
+byte timeout_error = 93;                  //ошибка по таймауту
+byte data[254];                           //массив для данных
+byte net_packet[6];                       //массив пакета
+byte nn;                                  //размер блока ланных
+byte com;                                 //команда полученная с линии
+boolean flag_net;                         //флаг получения пакета/unused
+boolean flag_data;                        //флаг наличия в пакете данных/unused
+FastCRC8 CRC8;                            //инициализация функции CRC
+SoftwareSerial pc(rx_pc, tx_pc);          //Serial на комп. в основе для дебага
 
 void setup() {
 	Serial.begin(115200);
+  pc.begin(115200);
 	pinMode(pin_tr, OUTPUT);
 	pinMode(pin_relay, OUTPUT);
 	digitalWrite(pin_tr, LOW);
 	digitalWrite(pin_relay, LOW);
-	pc.begin(115200);
 }
 
 void loop(){
