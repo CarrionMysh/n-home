@@ -48,6 +48,13 @@ byte NetHome::getCom(){
   return (_com);
 }
 
+byte NetHome::getID(){
+  return (_alien_id);
+}
+byte NetHome::getNdata(){
+  return (_nn);
+}
+
 void NetHome::setTimeout(unsigned long timeout_tick){
   _timeout_tick = timeout_tick;
 }
@@ -103,7 +110,7 @@ byte NetHome::recive(boolean mode){
 							if (crc_incoming == crc_calc) { //проверка на crc дату
 								// flag_data = true;
 								// pc.println("data_ok");
-								return (_ok);
+								return (_data_ok);
 							}
 							else {
 								 // pc.println("data_crc_error");

@@ -18,6 +18,8 @@ public:
   byte getData(byte i);
   byte getCom();
   void setTimeout(unsigned long timeout_tick = 10);
+  byte getID();
+  byte getNdata();
 private:
   unsigned long _timeout_response = 50;
   byte _self_id;
@@ -32,7 +34,8 @@ private:
   unsigned long _timeout_tick = 10;
   byte _ok=94;                               //рабочий вариант ответа 94 '^'
   byte _packet_error = 99;                   //ошибка целостности пакета
-  byte _data_error = 100;                    //ошибка целостности пакета
+  byte _data_error = 101;                    //ошибка целостности пакета
+  byte _data_ok = 100;                       //получена дата
   byte _timeout_error = 93;                  //ошибка по таймауту
   byte timeout_silent = 92;
   byte _alien_id;                            //id не свой
